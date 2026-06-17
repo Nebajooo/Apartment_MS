@@ -6,6 +6,11 @@ const createRequest = async (req, res) => {
     const { title, description, priority, apartmentId } = req.body;
     const tenantId = req.user.id;
 
+    console.log("=== CREATE MAINTENANCE REQUEST ===");
+    console.log("Tenant ID:", tenantId);
+    console.log("Request body:", req.body);
+
+    // Validate
     if (!title || !description) {
       return res.status(400).json({
         success: false,
@@ -14,17 +19,39 @@ const createRequest = async (req, res) => {
     }
 
     // Get tenant's apartment
-    const tenant = await db.query(
-      "SELECT apartment_id FROM users WHERE id = $1",
+    const tenantResult = await db.query(
+      "SELECT id, apartment_id FROM users WHERE id = $1",
       [tenantId],
     );
 
-    const aptId = apartmentId || tenant.rows[0].apartment_id;
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Tenant not found",
+      });
+    }
+
+    const tenant = tenantResult.rows[0];
+    const aptId = apartmentId || tenant.apartment_id;
 
     if (!aptId) {
       return res.status(400).json({
         success: false,
-        message: "No apartment assigned to this tenant",
+        message:
+          "No apartment assigned to this tenant. Please contact management.",
+      });
+    }
+
+    // Verify apartment exists
+    const apartmentCheck = await db.query(
+      "SELECT id FROM apartments WHERE id = $1",
+      [aptId],
+    );
+
+    if (apartmentCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Apartment not found",
       });
     }
 
@@ -37,22 +64,43 @@ const createRequest = async (req, res) => {
     // Create request
     const result = await db.query(
       `INSERT INTO maintenance_requests 
-       (title, description, priority, tenant_id, apartment_id, photo_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       (title, description, priority, tenant_id, apartment_id, photo_url, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [title, description, priority || "MEDIUM", tenantId, aptId, photoUrl],
+      [
+        title,
+        description,
+        priority || "MEDIUM",
+        tenantId,
+        aptId,
+        photoUrl,
+        "PENDING",
+      ],
+    );
+
+    console.log("✅ Request created:", result.rows[0]);
+
+    // Get the full request with joins
+    const fullResult = await db.query(
+      `SELECT m.*, u.name as tenant_name, u.email as tenant_email, a.unit_number
+       FROM maintenance_requests m
+       JOIN users u ON m.tenant_id = u.id
+       JOIN apartments a ON m.apartment_id = a.id
+       WHERE m.id = $1`,
+      [result.rows[0].id],
     );
 
     res.status(201).json({
       success: true,
       message: "Maintenance request submitted successfully",
-      request: result.rows[0],
+      request: fullResult.rows[0],
     });
   } catch (error) {
-    console.error("Create maintenance error:", error);
+    console.error("❌ Create maintenance error:", error);
     res.status(500).json({
       success: false,
       message: "Error creating maintenance request",
+      error: error.message,
     });
   }
 };
