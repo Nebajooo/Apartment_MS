@@ -8,6 +8,7 @@ const VisitorList = () => {
   const [visitors, setVisitors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchVisitors();
@@ -16,11 +17,13 @@ const VisitorList = () => {
   const fetchVisitors = async () => {
     try {
       setLoading(true);
+      setError("");
       const endpoint = isAdmin ? "/visitors/all" : "/visitors/my-visitors";
       const response = await api.get(endpoint);
-      setVisitors(response.data.visitors);
+      setVisitors(response.data.visitors || []);
     } catch (error) {
       console.error("Error fetching visitors:", error);
+      setError("Failed to load visitors");
     } finally {
       setLoading(false);
     }
@@ -56,6 +59,16 @@ const VisitorList = () => {
     return colors[status] || "bg-gray-100 text-gray-800";
   };
 
+  const getStatusIcon = (status) => {
+    const icons = {
+      EXPECTED: "⏳",
+      CHECKED_IN: "✅",
+      CHECKED_OUT: "🚪",
+      CANCELLED: "❌",
+    };
+    return icons[status] || "❓";
+  };
+
   if (loading) {
     return <div className="text-center py-10">Loading visitors...</div>;
   }
@@ -67,23 +80,42 @@ const VisitorList = () => {
           {isAdmin ? "All Visitors" : "My Visitors"}
         </h1>
         {!isAdmin && (
-          <button onClick={() => setShowForm(true)} className="btn-primary">
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setError("");
+            }}
+            className="btn-primary"
+          >
             + Register Visitor
           </button>
         )}
       </div>
 
+      {error && (
+        <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4">
+          ❌ {error}
+        </div>
+      )}
+
       {showForm && (
         <div className="mb-6">
           <VisitorForm
             onClose={() => setShowForm(false)}
-            onSuccess={fetchVisitors}
+            onSuccess={() => {
+              setShowForm(false);
+              fetchVisitors();
+            }}
           />
         </div>
       )}
 
       {visitors.length === 0 ? (
-        <div className="text-center text-gray-500 py-10">No visitors found</div>
+        <div className="text-center text-gray-500 py-10">
+          {isAdmin
+            ? "No visitors registered"
+            : "You have no visitors registered"}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {visitors.map((visitor) => (
@@ -96,14 +128,16 @@ const VisitorList = () => {
                 <span
                   className={`px-2 py-1 rounded-full text-xs ${getStatusColor(visitor.status)}`}
                 >
-                  {visitor.status}
+                  {getStatusIcon(visitor.status)} {visitor.status}
                 </span>
               </div>
               <div className="mt-3 space-y-1 text-sm">
-                <p>
-                  <span className="text-gray-500">Purpose:</span>{" "}
-                  {visitor.purpose || "N/A"}
-                </p>
+                {visitor.purpose && (
+                  <p>
+                    <span className="text-gray-500">Purpose:</span>{" "}
+                    {visitor.purpose}
+                  </p>
+                )}
                 <p>
                   <span className="text-gray-500">Check-in:</span>{" "}
                   {new Date(visitor.check_in).toLocaleString()}
@@ -117,7 +151,7 @@ const VisitorList = () => {
                 {visitor.otp_code && (
                   <p>
                     <span className="text-gray-500">OTP:</span>{" "}
-                    <span className="font-mono font-bold">
+                    <span className="font-mono font-bold text-lg">
                       {visitor.otp_code}
                     </span>
                   </p>
@@ -126,6 +160,12 @@ const VisitorList = () => {
                   <p>
                     <span className="text-gray-500">Host:</span>{" "}
                     {visitor.host_name}
+                  </p>
+                )}
+                {visitor.unit_number && (
+                  <p>
+                    <span className="text-gray-500">Unit:</span>{" "}
+                    {visitor.unit_number}
                   </p>
                 )}
               </div>

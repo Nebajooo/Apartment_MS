@@ -1,65 +1,83 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
+
+// Import routes
+const authRoutes = require("./routes/authRoutes");
+const tenantRoutes = require("./routes/tenantRoutes");
+const maintenanceRoutes = require("./routes/maintenanceRoutes");
+const rentRoutes = require("./routes/rentRoutes");
+const visitorRoutes = require("./routes/visitorRoutes"); // Make sure this exists
+const noticeRoutes = require("./routes/noticeRoutes");
 const apartmentRoutes = require("./routes/apartmentRoutes");
+
 const app = express();
 
-// Middleware
-app.use(cors());
+// ============ MIDDLEWARE ============
+
+// CORS
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+  }),
+);
+
+// Parse JSON
 app.use(express.json());
+
+// Parse URL-encoded
 app.use(express.urlencoded({ extended: true }));
-app.use("/api/apartments", apartmentRoutes);
+
+// Serve static files
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`📝 ${req.method} ${req.url}`);
+  next();
+});
+
+// ============ ROUTES ============
+
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",
     message: "Smart Apartment API is running",
     timestamp: new Date().toISOString(),
+    version: "1.0.0",
   });
 });
 
-// ============ ROUTES (will add one by one) ============
-
-// Try to load auth routes with error handling
-try {
-  const authRoutes = require("./routes/authRoutes");
-  app.use("/api/auth", authRoutes);
-  console.log("✅ Auth routes loaded");
-} catch (error) {
-  console.log("⚠️ Auth routes not loaded:", error.message);
-}
-
-// Try to load tenant routes with error handling
-try {
-  const tenantRoutes = require("./routes/tenantRoutes");
-  app.use("/api/tenants", tenantRoutes);
-  console.log("✅ Tenant routes loaded");
-} catch (error) {
-  console.log("⚠️ Tenant routes not loaded:", error.message);
-}
-
-// Try to load maintenance routes with error handling
-try {
-  const maintenanceRoutes = require("./routes/maintenanceRoutes");
-  app.use("/api/maintenance", maintenanceRoutes);
-  console.log("✅ Maintenance routes loaded");
-} catch (error) {
-  console.log("⚠️ Maintenance routes not loaded:", error.message);
-}
+// API routes - MAKE SURE ALL ARE REGISTERED
+app.use("/api/auth", authRoutes);
+app.use("/api/tenants", tenantRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/rent", rentRoutes);
+app.use("/api/visitors", visitorRoutes); // <-- THIS MUST BE HERE
+app.use("/api/notices", noticeRoutes);
 app.use("/api/apartments", apartmentRoutes);
-// 404 handler
+
+// ============ ERROR HANDLING ============
+
+// 404 handler - THIS SHOULD BE LAST
 app.use((req, res) => {
+  console.log(`❌ Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: `Route ${req.originalUrl} not found`,
   });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.message);
-  res.status(500).json({
+  console.error("❌ Error:", err.stack);
+
+  res.status(err.status || 500).json({
     success: false,
     message: err.message || "Something went wrong!",
+    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
   });
 });
 

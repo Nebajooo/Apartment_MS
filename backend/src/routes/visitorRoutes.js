@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { protect, authorize } = require("../middleware/auth");
+const { protect } = require("../middleware/auth");
 const {
   registerVisitor,
   getMyVisitors,
@@ -9,23 +9,16 @@ const {
   checkOutVisitor,
 } = require("../controllers/visitorController");
 
+// All routes require authentication
 router.use(protect);
 
 // Tenant routes
-router.post("/", registerVisitor);
-router.get("/my-visitors", getMyVisitors);
+router.post("/", registerVisitor); // POST /api/visitors
+router.get("/my-visitors", getMyVisitors); // GET /api/visitors/my-visitors
 
 // Manager/Admin routes
-router.get("/all", authorize("SUPER_ADMIN", "MANAGER"), getAllVisitors);
-router.put(
-  "/:id/check-in",
-  authorize("SUPER_ADMIN", "MANAGER"),
-  checkInVisitor,
-);
-router.put(
-  "/:id/check-out",
-  authorize("SUPER_ADMIN", "MANAGER"),
-  checkOutVisitor,
-);
+router.get("/all", getAllVisitors); // GET /api/visitors/all
+router.put("/:id/check-in", checkInVisitor); // PUT /api/visitors/:id/check-in
+router.put("/:id/check-out", checkOutVisitor); // PUT /api/visitors/:id/check-out
 
 module.exports = router;

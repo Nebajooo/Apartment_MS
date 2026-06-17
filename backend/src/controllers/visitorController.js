@@ -3,14 +3,15 @@ const db = require("../config/database");
 // Register visitor
 const registerVisitor = async (req, res) => {
   try {
-    const { name, phone, purpose, checkIn, apartmentId } = req.body;
+    const { name, phone, purpose, checkIn } = req.body;
     const tenantId = req.user.id;
 
     console.log("=== REGISTER VISITOR ===");
     console.log("Tenant ID:", tenantId);
-    console.log("Request body:", req.body);
+    console.log("Visitor Name:", name);
+    console.log("Phone:", phone);
 
-    // Validate
+    // Validate required fields
     if (!name || !phone || !checkIn) {
       return res.status(400).json({
         success: false,
@@ -18,39 +19,27 @@ const registerVisitor = async (req, res) => {
       });
     }
 
-    // Get tenant's information
+    // Get tenant's apartment
     const tenantResult = await db.query(
-      "SELECT id, apartment_id, name as tenant_name FROM users WHERE id = $1",
-      [tenantId],
+      "SELECT id, apartment_id FROM users WHERE id = $1 AND role = $2",
+      [tenantId, "TENANT"],
     );
+
+    console.log("Tenant query result:", tenantResult.rows);
 
     if (tenantResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Tenant not found",
+        message: "Tenant not found. Please contact management.",
       });
     }
 
     const tenant = tenantResult.rows[0];
-    const aptId = apartmentId || tenant.apartment_id;
 
-    if (!aptId) {
+    if (!tenant.apartment_id) {
       return res.status(400).json({
         success: false,
-        message: "No apartment assigned to this tenant",
-      });
-    }
-
-    // Verify apartment exists
-    const apartmentCheck = await db.query(
-      "SELECT id FROM apartments WHERE id = $1",
-      [aptId],
-    );
-
-    if (apartmentCheck.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Apartment not found",
+        message: "No apartment assigned to you. Please contact management.",
       });
     }
 
@@ -68,7 +57,7 @@ const registerVisitor = async (req, res) => {
         phone,
         purpose || null,
         tenantId,
-        aptId,
+        tenant.apartment_id,
         checkIn,
         otpCode,
         "EXPECTED",
@@ -77,27 +66,15 @@ const registerVisitor = async (req, res) => {
 
     console.log("✅ Visitor registered:", result.rows[0]);
 
-    // Get full visitor details with joins
-    const fullResult = await db.query(
-      `SELECT v.*, 
-              u.name as host_name, 
-              u.email as host_email,
-              a.unit_number
-       FROM visitors v
-       JOIN users u ON v.host_id = u.id
-       JOIN apartments a ON v.apartment_id = a.id
-       WHERE v.id = $1`,
-      [result.rows[0].id],
-    );
-
     res.status(201).json({
       success: true,
       message: "Visitor registered successfully",
-      visitor: fullResult.rows[0],
-      otpCode, // For gate access
+      visitor: result.rows[0],
+      otpCode,
     });
   } catch (error) {
     console.error("❌ Register visitor error:", error);
+    console.error("Error stack:", error.stack);
     res.status(500).json({
       success: false,
       message: "Error registering visitor",
@@ -105,6 +82,7 @@ const registerVisitor = async (req, res) => {
     });
   }
 };
+
 // Get my visitors (tenant)
 const getMyVisitors = async (req, res) => {
   try {
